@@ -17,6 +17,7 @@ endif
 all: $(LIB)
 
 $(LIB): $(DEPS)
+	mkdir -p $(LIB_DIR)
 	$(CXX) $(CXXFLAGS) $(SRC) -o $@
 
 clean:

@@ -19,6 +19,12 @@ class Encoding:
 	def tensors(self):
 		return tuple(Tensor(getattr(self, f.name)) for f in fields(self))
 
+def _pad_batch(t: Tensor, B: int) -> Tensor:
+	n = t.shape[0]
+	if n == B: 
+		return t
+	return t.pad((0, B - n))
+
 class Evaluator:
 	def __init__(self, 
 		model: Model, 
@@ -50,13 +56,6 @@ class Evaluator:
 			moves, num_moves
 		)
 		return p.realize(), v.squeeze(-1).realize()
-	
-	@staticmethod
-	def _pad_batch(t: Tensor, B: int) -> Tensor:
-		n = t.shape[0]
-		if n == B: 
-			return t
-		return t.pad((0, B - n))
 
 	def eval(self, enc: Encoding):
 		# b: positions to evaluate; B: model batch size
@@ -67,13 +66,13 @@ class Evaluator:
 
 		inputs = enc.tensors()
 
-		for s in range(0, b, B):
-			e = min(s + B, b)
-			n = e - s
-			chunk = tuple(self._pad_batch(t[s:e], B) for t in inputs)
+		for batch_start in range(0, b, B):
+			batch_end = min(batch_start + B, b)
+			n = batch_end - batch_start
+			chunk = tuple(_pad_batch(t[batch_start:batch_end], B) for t in inputs)
 			pr, v = self._fwd(*chunk)
-			priors[s:e] = pr.numpy()[:n]
-			values[s:e] = v.numpy()[:n]
+			priors[batch_start:batch_end] = pr.numpy()[:n]
+			values[batch_start:batch_end] = v.numpy()[:n]
 		return priors, values
 
 	def eval_games(self, gb: GameBatch):
