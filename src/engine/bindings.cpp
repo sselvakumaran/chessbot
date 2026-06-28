@@ -2,7 +2,7 @@
 
 extern "C" {
   int game_max_moves() {
-    return MAX_MOVES;
+    return 256;
   }
   void* game_new() {
     static bool initialized = false;

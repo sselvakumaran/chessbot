@@ -2,9 +2,7 @@ from dataclasses import dataclass, fields
 import numpy as np
 from tinygrad import Tensor, TinyJit
 from models.v0 import Model
-from engine.game import GameBatch, MAX_MOVES
-
-MAX_TOKENS = MAX_MOVES + 64 + 2 # 128
+from engine.game import GameBatch
 
 @dataclass(frozen=True)
 class Encoding: # encoding of a whole GameBatch
@@ -17,12 +15,18 @@ class Encoding: # encoding of a whole GameBatch
 	num_moves: np.ndarray
 	mask: np.ndarray | None = None # bool (b,), True = active game; None = all active
 
-	def __len__(self): return self.board.shape[0]
-
-	def tensors(self): # model inputs only — the batch mask is applied post-hoc
+	def tensors(self):
 		return tuple(
 			Tensor(getattr(self, f.name)) for f in fields(self) if f.name != "mask"
 		)
+
+	def __len__(self): return self.board.shape[0]
+	def __getitem__(self, i: int) -> 'Encoding':
+		return Encoding(**{
+			f.name: None if f.name == "mask" else getattr(self, f.name)[i].copy()
+			for f in fields(self)
+    })
+
 
 def _pad_batch(t: Tensor, B: int) -> Tensor:
 	n = t.shape[0]
@@ -82,6 +86,7 @@ class Evaluator:
 		return priors, values
 	
 	def eval_logits(self, enc: Encoding):
+		
 		b, B = enc.board.shape[0], self.batch_size
 		p_logits = np.zeros((b, self.M), dtype=np.float32)
 		values = np.zeros((b,), dtype=np.float32)

@@ -133,14 +133,9 @@ class Model:
     self.max_moves = max_moves
 
     self.embed = Embedding(config)
-    # init other things... (focus on later)
-
     self.blocks = [TransformerBlock(config) for _ in range(config.n_layers)]
-
     self.norm_f = nn.LayerNorm(d_hidden)
-
     self.p_head = nn.Linear(d_hidden, 1)
-    # self.q_head = nn.Linear(d_hidden, 1)
     self.v_head = nn.Linear(d_hidden, 1)
   
   def __call__(self,
@@ -149,15 +144,32 @@ class Model:
     en_passant_square: Tensor, # int (B,) -1 = none
     repetition_count: Tensor, # int (B,) [0, 2]
     halfmove_clock: Tensor, # int (B,) [0, 99]
-    moves: Tensor, # int (B, M, 3)
+    moves: Tensor, # int (B, M, 4)
     num_moves: Tensor # int (B, )
   ):
     M = self.max_moves
     B = board.shape[0]
+    T = N_FIXED + M
 
     move_mask = (Tensor.arange(M).reshape(1, M) < num_moves.reshape(B, 1)).float()
     seq_mask = Tensor.ones(B, N_FIXED).cat(move_mask, dim=1)      # (B, T)
-    attn_bias = (1 - seq_mask).reshape(B, 1, 1, -1) * -1e9             # (B, 1, 1, T)
+
+    # change attention mechanism: moves cannot attend over another;
+    # board cannot attend over moves
+    # (this makes splitting moves between batches less hacky)
+    token_arange = Tensor.arange(T).float() # (T)
+    # (batch, head, query, key)
+
+    # all queries can attend to fixed columns
+    key_fixed = (token_arange < N_FIXED).reshape(1, T)
+    # move queries may attend to its own column
+    is_move = (token_arange >= N_FIXED).reshape(T, 1)
+    i_mtrx = (token_arange.reshape(T, 1) == token_arange.reshape(1, T)).float()
+    attn_allowed = key_fixed + (is_move * i_mtrx)
+    struct_bias = (1 - attn_allowed).reshape(1, 1, T, T) * -1e9
+    # don't include padded
+    key_bias = (1 - seq_mask).reshape(B, 1, 1, -1) * -1e9             # (B, 1, 1, T)
+    attn_bias = struct_bias + key_bias
 
     x = self.embed(
       board, 
@@ -175,7 +187,6 @@ class Model:
     x = self.norm_f(x)
     move_x = x[:, N_FIXED:, :] # (B, M, d)
     p_logits = self.p_head(move_x).squeeze(-1) + (1 - move_mask) * -1e9 # (B, M)
-    # q_out = self.q_head(move_x).squeeze(-1).tanh() * move_mask
     v_out = self.v_head(x[:, N_FIXED - 1, :]).tanh()
     return (p_logits, v_out)  #(p_logits, q_out, v_out)
 

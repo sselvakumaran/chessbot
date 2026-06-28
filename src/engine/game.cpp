@@ -10,7 +10,7 @@
 // note: since moves aren't positional they don't increase parameter counts.
 // (but does increase compute)
 
-constexpr int MAX_MOVES = 128 - 64 - 2;
+// constexpr int MAX_MOVES = 256;
 
 enum class GameResult: int {
   ONGOING = 0,
@@ -89,7 +89,7 @@ public:
       halfmove_clock_out
     );
 
-    if (legal_.n > MAX_MOVES) std::abort();
+    // if (legal_.n > MAX_MOVES) std::abort();
 
     for (int i = 0; i < legal_.n; i++) {
       const Move move = legal_.moves[i];

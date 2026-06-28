@@ -43,7 +43,7 @@ import numpy as np
 #   s_to: int
 #   move_type: MoveType
 
-_lib_name = "lib/libchess.dylib" if platform.system() == "Darwin" else "lib/libchess.so"
+_lib_name = "../../lib/libchess.dylib" if platform.system() == "Darwin" else "../../lib/libchess.so"
 _lib_path = Path(__file__).resolve().parent / _lib_name
 if not _lib_path.exists():
   raise FileNotFoundError(

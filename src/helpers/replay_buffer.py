@@ -28,8 +28,8 @@ class ReplayBuffer:
 		self.moves[i] = enc.moves
 		self.num_moves[i] = enc.num_moves
 
-		self.pi = pi
-		self.z = z
+		self.pi[i] = pi
+		self.z[i] = z
 
 		self.ptr = (self.ptr + 1) % self.capacity
 		self.size = min(self.size + 1, self.capacity)
@@ -60,6 +60,8 @@ class ReplayBuffer:
 			halfmove_clock=self.halfmove_clock[:size],
 			moves=self.moves[:size],
 			num_moves=self.num_moves[:size],
+			pi=self.pi[:size], 
+			z=self.z[:size],
 			meta=np.array([self.capacity, size, self.ptr], dtype=np.uint64)
 		)
 	
@@ -71,11 +73,15 @@ class ReplayBuffer:
 			out.size = size
 			out.ptr = ptr
 
-			out.board=data['board']
-			out.castling=data['castling']
-			out.en_passant_square=data['en_passant_square']
-			out.repetition_count=data['repetition_count']
-			out.halfmove_clock=data['halfmove_clock']
-			out.moves=data['moves']
-			out.num_moves=data['num_moves']
+			out.board[:size]=data['board']
+			out.castling[:size]=data['castling']
+			out.en_passant_square[:size]=data['en_passant_square']
+			out.repetition_count[:size]=data['repetition_count']
+			out.halfmove_clock[:size]=data['halfmove_clock']
+			moves_width = data['moves'].shape[1]
+			out.moves[:size, :moves_width]=data['moves']
+			out.num_moves[:size]=data['num_moves']
+			p_logits_width = data['pi'].shape[1]
+			out.pi[:size, :p_logits_width]=data['pi']
+			out.z[:size]=data['z']
 		return out
