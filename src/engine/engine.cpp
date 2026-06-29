@@ -11,6 +11,7 @@ struct Board {
   Bitboard pieces[2][6];
   Bitboard player_occupancy[2];
   Bitboard occupancy;
+  uint8_t mailbox[64];
   PieceColor to_move;
   uint8_t castling; // flags for rights to castle
   int8_t en_passant_square; // what square is available to en passant
@@ -28,12 +29,6 @@ struct Move {
   uint8_t to() const { return (d >> 6) & 0b111111; }
   uint8_t promo() const { return ((d >> 12) & 3) + KNIGHT; }
   MoveFlag flag() const { return MoveFlag(d >> 14); }
-};
-struct Undo {
-  PieceType captured;
-  uint8_t castling;
-  int8_t en_passant_square;
-  uint64_t hash;
 };
 enum : uint8_t { CR_WK = 1, CR_WQ = 2, CR_BK = 4, CR_BQ = 8 };
 
@@ -300,6 +295,7 @@ Board init_board() {
 
   auto place = [&](PieceColor color, PieceType type, int s) {
     board.pieces[static_cast<int>(color)][static_cast<int>(type)] |= ONE << s;
+    board.mailbox[s] = static_cast<uint8_t>(1 + 6 * color + type);
   };
 
   for (int c = 0; c < 8; c++) {
@@ -378,16 +374,6 @@ void get_pseudo_legal_moves(const Board &board, MoveList &moves) {
   }
 }
 
-inline void recompute_occupancy(Board &b) {
-  b.occupancy = 0;
-  for (int color = 0; color < 2; color++) {
-    b.player_occupancy[color] = 0;
-    for (int type = 0; type < 6; type++)
-      b.player_occupancy[color] |= b.pieces[color][type];
-    b.occupancy |= b.player_occupancy[color];
-  }
-}
-
 static const std::array<uint8_t, 64> CASTLE_MASK = []{
   std::array<uint8_t, 64> mask; mask.fill(0xF);
   mask[0] = 0b1101; mask[4] = 0b1100; mask[7] = 0b1110;
@@ -429,25 +415,23 @@ bool in_check(const Board& board, PieceColor color) {
   return square_attacked(board, king_s, opposite_color(color));
 }
 
-void make_move(Board &board, Move move, Undo &undo) {
+void make_move(Board &board, Move move) {
   PieceColor color_p = board.to_move, color_o = opposite_color(color_p);
   int from = move.from(), to = move.to();
   MoveFlag flag = move.flag();
-  PieceType type = piece_on(board, from);
+  uint8_t from_code = board.mailbox[from], to_code = board.mailbox[to];
+  PieceType type = static_cast<PieceType>((from_code - 1) % 6);
   Bitboard from_board = ONE << from, to_board = ONE << to;
-
-  undo.captured = piece_on(board, to);
-  undo.castling = board.castling;
-  undo.en_passant_square = board.en_passant_square;
-  undo.hash = board.hash;
+  PieceType captured = to_code
+    ? static_cast<PieceType>((to_code - 1) % 6) : PieceType::NONE;
 
   uint64_t hash = board.hash;
   board.pieces[color_p][type] ^= from_board;
   hash ^= zobrist_piece[color_p][type][from];
 
-  if (undo.captured != PieceType::NONE) {
-    board.pieces[color_o][undo.captured] ^= to_board;
-    hash ^= zobrist_piece[color_o][undo.captured][to];
+  if (captured != PieceType::NONE) {
+    board.pieces[color_o][captured] ^= to_board;
+    hash ^= zobrist_piece[color_o][captured][to];
   }
   
   if (flag == MoveFlag::PROMOTION) {
@@ -458,19 +442,30 @@ void make_move(Board &board, Move move, Undo &undo) {
     hash ^= zobrist_piece[color_p][type][to];
   }
 
+  int ep_captured;
   if (flag == MoveFlag::ENPASSANT) {
-    int cap = (color_p == PieceColor::WHITE) ? to - 8 : to + 8;
-    board.pieces[color_o][PieceType::PAWN] ^= (ONE << cap);
-    hash ^= zobrist_piece[color_o][PieceType::PAWN][cap];
+    ep_captured = (color_p == PieceColor::WHITE) ? to - 8 : to + 8;
+    board.pieces[color_o][PieceType::PAWN] ^= (ONE << ep_captured);
+    hash ^= zobrist_piece[color_o][PieceType::PAWN][ep_captured];
   }
 
+  int rook_from, rook_to;
   if (flag == MoveFlag::CASTLE) {
-    int rook_from, rook_to;
     castle_rook_squares(to, rook_from, rook_to);
     board.pieces[color_p][PieceType::ROOK] ^= 
       (ONE << rook_from) | (ONE << rook_to);
     hash ^= zobrist_piece[color_p][PieceType::ROOK][rook_from] 
       ^ zobrist_piece[color_p][PieceType::ROOK][rook_to];
+  }
+
+  board.mailbox[from] = 0;
+  board.mailbox[to] = static_cast<uint8_t>(1 + 6 * color_p +
+    (flag == MoveFlag::PROMOTION ? move.promo() : type));
+  if (flag == MoveFlag::ENPASSANT)
+    board.mailbox[ep_captured] = 0;
+  if (flag == MoveFlag::CASTLE) {
+    board.mailbox[rook_from] = 0;
+    board.mailbox[rook_to] = static_cast<uint8_t>(1 + 6 * color_p + PieceType::ROOK);
   }
   
   if (board.en_passant_square != -1)
@@ -489,44 +484,21 @@ void make_move(Board &board, Move move, Undo &undo) {
   hash ^= zobrist_side;
   board.to_move = color_o;
   board.hash = hash;
-  recompute_occupancy(board);
+
+  // recompute occupancy
+  Bitboard& occupancy_p = board.player_occupancy[color_p];
+  Bitboard& occupancy_o = board.player_occupancy[color_o];
+  occupancy_p ^= from_board ^ to_board;
+  if (captured != PieceType::NONE && flag != MoveFlag::ENPASSANT)
+    occupancy_o ^= to_board;
+  if (flag == MoveFlag::ENPASSANT)
+    occupancy_o ^= (ONE << ep_captured);
+  if (flag == MoveFlag::CASTLE)
+    occupancy_p ^= (ONE << rook_from) ^ (ONE << rook_to);
+  board.occupancy = occupancy_p | occupancy_o;
 }
 
-void unmake_move(Board &board, Move move, const Undo &undo) {
-  PieceColor color_p = opposite_color(board.to_move), color_o = board.to_move;
-  int from = move.from(), to = move.to();
-  MoveFlag flag = move.flag();
-  Bitboard from_board = ONE << from, to_board = ONE << to;
-
-  if (flag == MoveFlag::PROMOTION) {
-    board.pieces[color_p][move.promo()] ^= to_board;
-    board.pieces[color_p][PieceType::PAWN] ^= from_board;
-  } else {
-    PieceType type = piece_on(board, to);
-    board.pieces[color_p][type] ^= to_board;
-    board.pieces[color_p][type] ^= from_board;
-  }
-  if (undo.captured != PieceType::NONE)
-    board.pieces[color_o][undo.captured] ^= to_board;
-  if (flag == MoveFlag::ENPASSANT) {
-    int cap = (color_p == PieceColor::WHITE) ? to - 8 : to + 8;
-    board.pieces[color_o][PieceType::PAWN] ^= (ONE << cap);
-  }
-  if (flag == MoveFlag::CASTLE) {
-    int rook_from, rook_to;
-    castle_rook_squares(to, rook_from, rook_to);
-    board.pieces[color_p][PieceType::ROOK] ^= 
-      (ONE << rook_from) | (ONE << rook_to);
-  }
-
-  board.castling = undo.castling;
-  board.en_passant_square = undo.en_passant_square;
-  board.to_move = color_p;
-  board.hash = undo.hash;
-  recompute_occupancy(board);
-}
-
-void get_moves(Board &board, MoveList &legal) {
+void get_moves(const Board& board, MoveList& legal) {
   legal.n = 0;
   MoveList pseudo; get_pseudo_legal_moves(board, pseudo);
   PieceColor color_p = board.to_move, color_o = opposite_color(color_p);
@@ -541,9 +513,9 @@ void get_moves(Board &board, MoveList &legal) {
         && !square_attacked(board, to, color_o)
       ) legal.add(m);
     } else {
-      Undo u; make_move(board, m, u);
-      if (!in_check(board, color_p)) legal.add(m);
-      unmake_move(board, m, u);
+      Board scratch = board;
+      make_move(scratch, m);
+      if (!in_check(scratch, color_p)) legal.add(m);
     }
   }
 }
