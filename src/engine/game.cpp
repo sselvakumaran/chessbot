@@ -11,7 +11,7 @@
 // note: since moves aren't positional they don't increase parameter counts.
 // (but does increase compute)
 
-constexpr int MAX_MOVES = 256;
+constexpr int MAX_MOVES_CAPACITY = 256;
 
 enum class GameResult: uint8_t {
   ONGOING = 0,
@@ -65,7 +65,7 @@ class ChessInterface {
 public:
   ChessInterface(int sim_cap = 64) : 
     states_(sim_cap + 1), 
-    actions_((sim_cap + 1) * MAX_MOVES) 
+    actions_((sim_cap + 1) * MAX_MOVES_CAPACITY) 
   {
     reset();
   }

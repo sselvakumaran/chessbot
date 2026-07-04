@@ -1,6 +1,6 @@
 import numpy as np
-from engine.game import MAX_MOVES
-from helpers.evaluator import Encoding
+from engine.game import MAX_MOVES_CAPACITY
+from helpers.evaluatorv1 import Encoding
 
 # circular buffer
 class ReplayBuffer:
@@ -11,11 +11,11 @@ class ReplayBuffer:
 		self.en_passant_square = np.zeros((capacity, ), np.int8)
 		self.repetition_count = np.zeros((capacity, ), np.uint8)
 		self.halfmove_clock = np.zeros((capacity, ), np.uint8)
-		self.moves = np.zeros((capacity, MAX_MOVES, 4), np.uint8)
+		self.moves = np.zeros((capacity, MAX_MOVES_CAPACITY, 4), np.uint8)
 		self.num_moves = np.zeros((capacity, ), np.int32)
 
 		# store pi, z
-		self.pi = np.zeros((capacity, MAX_MOVES), np.float32)
+		self.pi = np.zeros((capacity, MAX_MOVES_CAPACITY), np.float32)
 		self.z = np.zeros((capacity, ), np.float32)
 	
 	def add(self, enc: Encoding, pi, z):

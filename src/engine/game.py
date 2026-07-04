@@ -20,8 +20,8 @@ if not _lib_path.exists():
   )
 _lib = ctypes.CDLL(str(_lib_path))
 
-_lib.game_max_moves.restype = ctypes.c_int
-MAX_MOVES = _lib.game_max_moves()
+_lib.game_max_moves_capacity.restype = ctypes.c_int
+MAX_MOVES_CAPACITY = _lib.game_max_moves_capacity()
 
 _lib.gamebatch_new.restype = ctypes.c_void_p
 _lib.gamebatch_new.argtypes = [ctypes.c_int, ctypes.c_int]
@@ -194,7 +194,7 @@ class Game:
 
 class GameBatch:
   def __init__(self, batch_size: int, sim_cap: int = 64):
-    B, M = batch_size, MAX_MOVES
+    B = batch_size
     self._gamebatch = _lib.gamebatch_new(B, sim_cap)
     self.sim_cap = sim_cap
     self.states_cap = sim_cap + 1
@@ -211,7 +211,7 @@ class GameBatch:
     self.ep = np.zeros((B,), np.int8)
     self.rep = np.zeros((B,), np.uint8)
     self.clock = np.zeros((B,), np.uint8)
-    self.moves = np.zeros((B, M, 4), np.uint8)
+    self.moves = np.zeros((B, MAX_MOVES_CAPACITY, 4), np.uint8)
     self.num_moves = np.zeros((B,), np.int32)
 
   def __del__(self):

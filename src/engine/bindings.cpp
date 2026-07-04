@@ -13,7 +13,7 @@ static void ensure_attack_tables() {
 }
 
 extern "C" {
-  int game_max_moves() { return MAX_MOVES; }
+  int game_max_moves_capacity() { return MAX_MOVES_CAPACITY; }
 
   void* game_new(int sim_cap) {
     ensure_attack_tables();

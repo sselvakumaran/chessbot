@@ -85,8 +85,8 @@ struct GameManager {
     int32_t* num_moves_out
   ) {
     for (int i = 0; i < num_games; i++) {
-      uint8_t* moves_row = moves_out + i * MAX_MOVES * 4;
-      memset(moves_row, 0, MAX_MOVES * 4);
+      uint8_t* moves_row = moves_out + i * MAX_MOVES_CAPACITY * 4;
+      memset(moves_row, 0, MAX_MOVES_CAPACITY * 4);
       games[game_idxs[i]].encode(
         state[i],
         board_out + i * 64,
