@@ -19,21 +19,16 @@ class Embedding(nn.Module):
     super().__init__()
     d_hidden = config.d_hidden
 
-    # fused (square, piece) table for board tokens: index = square * 13 + code.
-    # subsumes the old additive et_pos + et_piece (seed with their sum to
-    # migrate old checkpoints) while allowing square-piece conjunctions
+    # fused (square, piece) table: index = square * 13 + code. board tokens
+    # use it directly; move tokens reuse the same rows for their from/to
+    # squares, tying move and board representations by construction
     self.et_board = nn.Embedding(64 * 13, d_hidden)
-    self.et_piece = nn.Embedding(13, d_hidden)  # move tokens: mover piece
     # castle (plr, opp), en_passant, repetition_count, halfmove_clock, clock_base
     self.et_state = nn.Parameter(torch.empty(6, d_hidden))
     self.et_cls = nn.Parameter(torch.empty(d_hidden))
 
-    self.et_move_from = nn.Embedding(64, d_hidden)
-    self.et_move_to = nn.Embedding(64, d_hidden)
     # normal, castle, en passant, promotion (knight, bishop, rook, queen)
     self.et_move_type = nn.Embedding(7, d_hidden)
-    # piece on the move's to-square: 0 = none, 7-12 = opp piece
-    self.et_move_capture = nn.Embedding(13, d_hidden)
     self.out_norm = nn.LayerNorm(d_hidden)
 
     self.register_buffer("pos", torch.arange(64).view(1, 64), persistent=False)
@@ -68,15 +63,15 @@ class Embedding(nn.Module):
 
     cls_embed = self.et_cls.view(1, 1, -1).expand(B, 1, -1)
 
-    # captured piece read straight off the canonical board input (0 for ep /
-    # castle landing squares; ep captures are identified by move type)
+    # move token = its from-square's and to-square's board rows + move type.
+    # et_board[from, mover] carries the mover, et_board[to, captured] the
+    # capture (0 for ep / castle landing squares; ep is identified by type)
+    mover = board.gather(1, moves[:, :, 0])
     captured = board.gather(1, moves[:, :, 1])
     move_embed = (
-      self.et_move_from(moves[:, :, 0])
-      + self.et_move_to(moves[:, :, 1])
+      self.et_board(moves[:, :, 0] * 13 + mover)
+      + self.et_board(moves[:, :, 1] * 13 + captured)
       + self.et_move_type(moves[:, :, 2])
-      + self.et_piece(moves[:, :, 3])
-      + self.et_move_capture(captured)
     )
 
     return self.out_norm(
@@ -152,7 +147,7 @@ class Model(nn.Module):
     )
     self.norm_f = nn.LayerNorm(config.d_hidden)
     self.p_head = nn.Linear(config.d_hidden, 1)
-    self.v_head = nn.Linear(config.d_hidden, 1)
+    self.v_head = nn.Linear(config.d_hidden, 3)  # win / draw / loss logits
 
     # attention structure is input-independent: build it once.
     # moves cannot attend over one another; board cannot attend over moves
@@ -209,8 +204,13 @@ class Model(nn.Module):
     x = self.norm_f(x)
     move_x = x[:, N_FIXED:, :] # (B, M, d)
     p_logits = self.p_head(move_x).squeeze(-1).masked_fill(~move_mask, -1e9) # (B, M)
-    v_out = self.v_head(x[:, N_FIXED - 1, :]).tanh()
-    return (p_logits, v_out)
+    # WDL head, mover's perspective. train: cross_entropy(wdl_logits, cls)
+    # with cls = 1 - z (z=+1 win -> 0, 0 draw -> 1, -1 loss -> 2).
+    # search uses the scalar v = E[outcome] = p(W) - p(L), in [-1, 1]
+    wdl_logits = self.v_head(x[:, N_FIXED - 1, :])           # (B, 3)
+    wdl = wdl_logits.softmax(-1)
+    v_out = (wdl[:, 0] - wdl[:, 2]).unsqueeze(-1)            # (B, 1)
+    return (p_logits, v_out, wdl_logits)
 
 def _init_module(module: nn.Module, base_std: float):
   if isinstance(module, nn.Linear):

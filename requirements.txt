@@ -1,17 +1,24 @@
 appnope==0.1.4
 asttokens==3.0.1
+chess==1.11.2
 comm==0.2.3
 debugpy==1.8.21
 decorator==5.3.1
 executing==2.2.1
+filelock==3.29.5
+fsspec==2026.6.0
 ipykernel==7.3.0
 ipython==9.14.1
 ipython_pygments_lexers==1.1.1
 jedi==0.20.0
+Jinja2==3.1.6
 jupyter_client==8.9.1
 jupyter_core==5.9.1
+MarkupSafe==3.0.3
 matplotlib-inline==0.2.2
+mpmath==1.3.0
 nest-asyncio2==1.7.2
+networkx==3.6.1
 numpy==2.4.6
 packaging==26.2
 parso==0.8.7
@@ -26,7 +33,9 @@ python-dateutil==2.9.0.post0
 pyzmq==27.1.0
 six==1.17.0
 stack-data==0.6.3
+sympy==1.14.0
 tinygrad @ git+https://github.com/tinygrad/tinygrad.git@1cb6b88d37d8633e1c12033400cf8efdee32a2ec
+torch==2.12.1
 tornado==6.5.7
 traitlets==5.15.1
 typing_extensions==4.15.0

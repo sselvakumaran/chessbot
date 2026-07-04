@@ -4,7 +4,7 @@ CXXFLAGS ?= -std=c++20 -O2 -shared -fPIC
 ENGINE_DIR := src/engine
 LIB_DIR := lib
 SRC := $(ENGINE_DIR)/bindings.cpp
-DEPS := $(SRC) $(ENGINE_DIR)/game.cpp $(ENGINE_DIR)/engine.cpp
+DEPS := $(SRC) $(ENGINE_DIR)/batching.cpp $(ENGINE_DIR)/game.cpp $(ENGINE_DIR)/engine.cpp
 
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
