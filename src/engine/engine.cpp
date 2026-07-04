@@ -11,11 +11,11 @@ struct Board {
   Bitboard pieces[2][6];
   Bitboard player_occupancy[2];
   Bitboard occupancy;
+  uint64_t hash; // zobrist hash 
   uint8_t mailbox[64];
   PieceColor to_move;
   uint8_t castling; // flags for rights to castle
   int8_t en_passant_square; // what square is available to en passant
-  uint64_t hash; // zobrist hash 
 };
 // MOVE:
 // 0-5: from
@@ -471,9 +471,16 @@ void make_move(Board &board, Move move) {
   if (board.en_passant_square != -1)
     hash ^= zobrist_ep[board.en_passant_square & 7];
   int diff = to - from;
-  board.en_passant_square = (type == PieceType::PAWN 
-    && (diff == 16 || diff == -16)
-    ) ? (from + to) / 2 : -1;
+  int can_en_passant = (type == PieceType::PAWN && (diff == 16 || diff == -16))
+    ? (from + to) / 2 : -1;
+  // only keep the ep square if an enemy pawn could capture it (pseudo-legally),
+  // so FIDE-identical positions share a hash for repetition detection
+  if (can_en_passant != -1
+    && !(pawn_attacks[color_p][can_en_passant] 
+        & board.pieces[color_o][PieceType::PAWN])
+  )
+    can_en_passant = -1;
+  board.en_passant_square = (int8_t) can_en_passant;
   if (board.en_passant_square != -1)
     hash ^= zobrist_ep[board.en_passant_square & 7];
   
