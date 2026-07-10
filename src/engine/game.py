@@ -29,6 +29,7 @@ _lib.gamebatch_free.argtypes = [ctypes.c_void_p]
 _lib.gamebatch_size.restype = ctypes.c_int
 _lib.gamebatch_size.argtypes = [ctypes.c_void_p]
 _lib.gamebatch_reset.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+_lib.gamebatch_reset_trees.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
 _lib.gamebatch_get_roots.argtypes = [ctypes.c_void_p] + [ctypes.c_void_p] * 3
 _lib.gamebatch_play.argtypes = [ctypes.c_void_p] + [ctypes.c_void_p] * 3
 _lib.gamebatch_get_children.argtypes = [ctypes.c_void_p] + [ctypes.c_void_p] * 5
@@ -195,6 +196,7 @@ class Game:
 class GameBatch:
   def __init__(self, batch_size: int, sim_cap: int = 64):
     B = batch_size
+    self.gamebatch_size = batch_size
     self._gamebatch = _lib.gamebatch_new(B, sim_cap)
     self.sim_cap = sim_cap
     self.states_cap = sim_cap + 1
@@ -262,6 +264,12 @@ class GameBatch:
     """Resets lanes where mask (all lanes if None)."""
     _lib.gamebatch_reset(self._gamebatch, _ptr(_mask(mask)))
     self._roots_stale = True
+
+  def reset_trees(self, mask: np.ndarray | None = None) -> None:
+    """Frees the search arenas (positions unchanged, root back to state 0).
+    Searches must call this first: the arena only otherwise resets on
+    play/reset, so back-to-back searches accumulate until overflow."""
+    _lib.gamebatch_reset_trees(self._gamebatch, _ptr(_mask(mask)))
 
   # ---- search tree (root = state 0; tree resets on every play/reset) ----
   def get_children(self, parent_states: np.ndarray, actions: np.ndarray) -> tuple:

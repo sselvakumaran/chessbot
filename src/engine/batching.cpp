@@ -19,6 +19,15 @@ struct GameManager {
         games[i].reset();
   }
 
+  // frees every lane's search arena (root re-materializes as state 0).
+  // searches MUST call this first: the arena only otherwise resets on
+  // play/reset, so back-to-back searches would accumulate until overflow
+  void reset_trees(const uint8_t* mask) {
+    for (int i = 0; i < size(); i++)
+      if (!mask || mask[i])
+        games[i].reset_tree();
+  }
+
   void get_roots(
     int32_t* num_actions_out,
     int8_t* result_out,

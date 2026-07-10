@@ -74,6 +74,9 @@ extern "C" {
   void gamebatch_reset(void* m, const uint8_t* mask) {
     static_cast<GameManager*>(m)->reset(mask);
   }
+  void gamebatch_reset_trees(void* m, const uint8_t* mask) {
+    static_cast<GameManager*>(m)->reset_trees(mask);
+  }
   void gamebatch_get_roots(void* m,
     int32_t* num_actions, int8_t* result, int8_t* to_move
   ) {
