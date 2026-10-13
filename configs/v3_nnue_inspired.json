@@ -1,0 +1,26 @@
+{
+  "version": "v3_nnue_inspired",
+  "model": {
+    "d_embed": 256,
+    "d_head": 32
+  },
+  "n_sims": 48,
+  "sim_cap": 4096,
+  "seed": 42,
+  "device": "cpu",
+  "train": {
+    "max_steps": 500,
+    "lr": 0.0003,
+    "temperature": 0.05,
+    "max_plies": 200,
+    "checkpoint_interval": 25,
+    "n_lanes": 128,
+    "buffer_capacity": 500000,
+    "min_buffer": 5000,
+    "batch_size": 512,
+    "grad_steps": 32,
+    "blend_targets": true,
+    "lambda_decisive": 0.3,
+    "lambda_draw": 0.9
+  }
+}

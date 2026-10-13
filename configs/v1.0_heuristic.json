@@ -1,0 +1,9 @@
+{
+  "version": "v1_heuristic",
+  "max_depth": 4,
+  "pst_weight": 0.0,
+  "seed": 42,
+  "train": {
+    "num_games": 0
+  }
+}

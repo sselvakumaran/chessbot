@@ -1,7 +1,8 @@
 venv/
 lib/
-data/
+build/
+runs/
 **/__pycache__/
 .DS_Store
 .vscode/
-tests/
+.claude/

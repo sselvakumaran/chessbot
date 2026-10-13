@@ -1,3 +1,5 @@
+#pragma once
+
 #include "batching.cpp"
 
 // Boundary is index + tensor: C++ owns the tree (States/Actions arenas), Python
@@ -74,6 +76,11 @@ extern "C" {
   void gamebatch_reset(void* m, const uint8_t* mask) {
     static_cast<GameManager*>(m)->reset(mask);
   }
+  void gamebatch_copy_lane(void* dst, void* src, int dst_lane, int src_lane) {
+    static_cast<GameManager*>(dst)->copy_lane_from(
+      *static_cast<GameManager*>(src), src_lane, dst_lane
+    );
+  }
   void gamebatch_reset_trees(void* m, const uint8_t* mask) {
     static_cast<GameManager*>(m)->reset_trees(mask);
   }
@@ -94,6 +101,25 @@ extern "C" {
     static_cast<GameManager*>(m)->get_children(
       parent_state, action, state, num_actions, result
     );
+  }
+  void gamebatch_search_keys(void* m,
+    const int32_t* lane, const int32_t* state, int n, uint64_t* out
+  ) {
+    auto* manager = static_cast<GameManager*>(m);
+    for (int i = 0; i < n; i++)
+      manager->games[lane[i]].search_key(state[i], out + 3 * i);
+  }
+  void gamebatch_in_check(void* m,
+    const int32_t* lane, const int32_t* state, int n, uint8_t* out
+  ) {
+    auto* manager = static_cast<GameManager*>(m);
+    for (int i = 0; i < n; i++)
+      out[i] = manager->games[lane[i]].state_in_check(state[i]);
+  }
+  void gamebatch_hash(void* m,
+    const int32_t* lane, const int32_t* state, int n, uint64_t* out
+  ) {
+    static_cast<GameManager*>(m)->hashes(lane, state, n, out);
   }
   void gamebatch_encode(void* m,
     const int32_t* lane, const int32_t* state, int n,

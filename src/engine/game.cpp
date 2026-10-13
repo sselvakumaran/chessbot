@@ -1,3 +1,5 @@
+#pragma once
+
 #include "engine.cpp"
 #include <unordered_map>
 #include <vector>
@@ -50,6 +52,7 @@ struct State {
   int32_t parent_state;
   int32_t actions_offset;
   int32_t num_actions;
+  uint64_t history_hash;
   uint8_t repetition_count;
   uint8_t halfmove_clock;
   GameResult result;
@@ -74,7 +77,16 @@ public:
     root_board_ = init_board();
     seen_.clear();
     seen_[root_board_.hash] = 1;
+    history_hash_ = history_entry(root_board_.hash, 1);
     halfmove_clock_ = 0;
+    reset_tree();
+  }
+
+  void copy_game_from(const ChessInterface& src) {
+    root_board_ = src.root_board_;
+    seen_ = src.seen_;
+    history_hash_ = src.history_hash_;
+    halfmove_clock_ = src.halfmove_clock_;
     reset_tree();
   }
 
@@ -83,7 +95,10 @@ public:
     bool halfmove_reset = reset_halfmove_clock(root_board_, move);
     make_move(root_board_, move);
     halfmove_clock_ = halfmove_reset ? 0 : halfmove_clock_ + 1;
-    seen_[root_board_.hash]++;
+    int count = seen_[root_board_.hash]++;
+    history_hash_ = halfmove_reset ? history_entry(root_board_.hash, 1)
+      : history_hash_ ^ history_entry(root_board_.hash, count)
+                      ^ history_entry(root_board_.hash, count + 1);
     reset_tree();
     return states_[0].result;
   }
@@ -120,6 +135,16 @@ public:
   int num_actions(int s) { return states_[s].num_actions; }
   int actions_offset(int s) { return states_[s].actions_offset; }
   int state_result(int s) { return (int) states_[s].result; }
+  uint64_t state_hash(int s) { return states_[s].board.hash; }
+  void search_key(int s, uint64_t* out) const {
+    out[0] = states_[s].board.hash;
+    out[1] = states_[s].history_hash;
+    out[2] = states_[s].halfmove_clock;
+  }
+  bool state_in_check(int s) const {
+    const Board& board = states_[s].board;
+    return ::in_check(board, board.to_move);
+  }
   int to_move() const { return (int) root_board_.to_move; }
 
   int encode(
@@ -180,6 +205,10 @@ private:
     s.parent_state = parent;
     s.halfmove_clock = halfmove_clock;
     s.repetition_count = repetition_count;
+    s.history_hash = parent < 0 ? history_hash_
+      : halfmove_clock == 0 ? history_entry(board.hash, 1)
+      : states_[parent].history_hash ^ history_entry(board.hash, repetition_count - 1)
+                                    ^ history_entry(board.hash, repetition_count);
 
     MoveList movelist; 
     get_moves(board, movelist);
@@ -220,6 +249,16 @@ private:
     return count;
   }
 
+  // Order-independent fingerprint of position occurrence counts since the
+  // last pawn move/capture. Earlier positions cannot recur after either.
+  static uint64_t history_entry(uint64_t hash, int count) {
+    if (!count) return 0;
+    uint64_t x = hash + uint64_t(count) * 0x9e3779b97f4a7c15ULL;
+    x = (x ^ (x >> 30)) * 0xbf58476d1ce4e5b9ULL;
+    x = (x ^ (x >> 27)) * 0x94d049bb133111ebULL;
+    return x ^ (x >> 31);
+  }
+  uint64_t history_hash_ = 0;
   Board root_board_;
   std::unordered_map<uint64_t,int> seen_;
   int halfmove_clock_ = 0;

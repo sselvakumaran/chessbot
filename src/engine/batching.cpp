@@ -1,3 +1,5 @@
+#pragma once
+
 #include <cstring>
 #include <vector>
 #include "game.cpp"
@@ -19,6 +21,12 @@ struct GameManager {
         games[i].reset();
   }
 
+  void copy_lane_from(const GameManager& src, int src_lane, int dst_lane) {
+    assert(src_lane >= 0 && src_lane < src.size());
+    assert(dst_lane >= 0 && dst_lane < size());
+    games[dst_lane].copy_game_from(src.games[src_lane]);
+  }
+
   // frees every lane's search arena (root re-materializes as state 0).
   // searches MUST call this first: the arena only otherwise resets on
   // play/reset, so back-to-back searches would accumulate until overflow
@@ -26,6 +34,14 @@ struct GameManager {
     for (int i = 0; i < size(); i++)
       if (!mask || mask[i])
         games[i].reset_tree();
+  }
+
+  // zobrist hash of (lane[i], state[i]) — pieces, castling, ep file, side
+  void hashes(
+    const int32_t* lane, const int32_t* state, int n, uint64_t* out
+  ) {
+    for (int i = 0; i < n; i++)
+      out[i] = games[lane[i]].state_hash(state[i]);
   }
 
   void get_roots(

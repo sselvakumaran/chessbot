@@ -1,0 +1,10 @@
+{
+  "version": "v1_heuristic",
+  "max_depth": 4,
+  "pst_weight": 1.0,
+  "seed": 42,
+  "train": {
+    "num_games": 1024,
+    "epsilon": 0.1
+  }
+}

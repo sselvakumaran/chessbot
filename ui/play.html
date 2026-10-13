@@ -1,0 +1,341 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>chessbot</title>
+<style>
+  body {
+    margin: 0; background: rgb(48, 46, 43); color: rgb(230, 230, 230);
+    font-family: Arial, sans-serif;
+    display: flex; justify-content: center; align-items: center;
+    min-height: 100vh;
+  }
+  #app { display: flex; }
+  #board { display: block; cursor: pointer; }
+  #panel {
+    width: 280px; height: 640px; background: rgb(38, 37, 34);
+    box-sizing: border-box; padding: 16px 18px; position: relative;
+    display: flex; flex-direction: column;
+  }
+  #title { font-size: 26px; }
+  #botname { font-size: 16px; color: rgb(160, 160, 160); margin-top: 8px; }
+  #side { font-size: 18px; margin-top: 16px; }
+  #status { font-size: 18px; margin-top: 18px; min-height: 22px; }
+  #status.turn { color: rgb(140, 200, 140); }
+  #status.busy, #status.over { color: rgb(255, 213, 79); }
+  #evalwrap { margin-top: 14px; min-height: 64px; visibility: hidden; }
+  #evaltxt { font-size: 17px; }
+  #evalsub { font-size: 13px; color: rgb(150, 150, 150); margin-top: 4px; }
+  #evalbar {
+    margin-top: 8px; height: 12px; background: rgb(70, 70, 70);
+    border: 1px solid rgb(20, 20, 20);
+  }
+  #evalfill { height: 100%; width: 50%; background: rgb(235, 235, 235); }
+  #moveshdr { font-size: 16px; color: rgb(160, 160, 160); margin-top: 10px; }
+  #history {
+    font-family: ui-monospace, Menlo, monospace; font-size: 14px;
+    line-height: 20px; margin-top: 6px; flex: 1; overflow: hidden;
+    white-space: pre;
+  }
+  #newgame {
+    margin-top: 10px; padding: 8px; font-size: 15px; cursor: pointer;
+    background: rgb(70, 70, 70); color: rgb(230, 230, 230);
+    border: 1px solid rgb(20, 20, 20); border-radius: 4px;
+  }
+  #newgame:hover { background: rgb(90, 90, 90); }
+  #hint { font-size: 13px; color: rgb(150, 150, 150); margin-top: 8px; }
+  /* side-pick overlay */
+  #picker {
+    position: fixed; inset: 0; background: rgba(0, 0, 0, 0.6);
+    display: flex; justify-content: center; align-items: center;
+  }
+  #picker .card {
+    background: rgb(38, 37, 34); padding: 28px 32px; border-radius: 8px;
+    text-align: center;
+  }
+  #picker .card div { font-size: 20px; margin-bottom: 18px; }
+  #picker button {
+    font-size: 17px; padding: 10px 22px; margin: 0 6px; cursor: pointer;
+    background: rgb(115, 149, 82); color: white; border: none;
+    border-radius: 4px;
+  }
+  #picker button:hover { filter: brightness(1.1); }
+  #picker button.dark { background: rgb(70, 70, 70); }
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="board" width="640" height="640"></canvas>
+  <div id="panel">
+    <div id="title">chessbot</div>
+    <div id="botname">connecting…</div>
+    <div id="side"></div>
+    <div id="status"></div>
+    <div id="evalwrap">
+      <div id="evaltxt"></div>
+      <div id="evalsub">(bot's search value, bot POV)</div>
+      <div id="evalbar"><div id="evalfill"></div></div>
+    </div>
+    <div id="moveshdr">Moves</div>
+    <div id="history"></div>
+    <button id="newgame">New game</button>
+    <div id="hint">R new game</div>
+  </div>
+</div>
+<div id="picker">
+  <div class="card">
+    <div>Play as</div>
+    <button data-color="white">White</button>
+    <button data-color="black" class="dark">Black</button>
+    <button data-color="random">Random</button>
+  </div>
+</div>
+
+<script>
+"use strict";
+const SQ = 80, WHITE = 0;
+const LIGHT = "rgb(235,236,208)", DARK = "rgb(115,149,82)";
+const HILITE = "rgba(255,213,79,0.51)", DOT = "rgba(40,40,40,0.27)";
+
+// piece codes: 1-6 white PNBRQK, 7-12 black
+const TEX = {1:"pl",2:"nl",3:"bl",4:"rl",5:"ql",6:"kl",
+             7:"pd",8:"nd",9:"bd",10:"rd",11:"qd",12:"kd"};
+const IMG = {};
+for (const [code, name] of Object.entries(TEX)) {
+  const im = new Image();
+  im.src = `/assets/${name}.png`;
+  im.onload = draw;
+  IMG[code] = im;
+}
+
+const cv = document.getElementById("board"), cx = cv.getContext("2d");
+const $ = id => document.getElementById(id);
+
+let hello = null;      // botName, results, promoOrder, enPassant
+let state = null;      // last server state
+let selected = null;   // abs square of the picked-up piece
+let promo = null;      // {from, to, options: {mtype: engine idx}}
+let sideChoice = "random";
+let frame = 0;
+
+const ws = new WebSocket(`ws://${location.host}/ws`);
+ws.onmessage = ev => {
+  const msg = JSON.parse(ev.data);
+  if (msg.type === "hello") {
+    hello = msg;
+    $("botname").textContent = msg.botName;
+  } else if (msg.type === "state") {
+    state = msg;
+    selected = promo = null;
+    render();
+  }
+};
+ws.onclose = () => {
+  $("status").textContent = "Disconnected";
+  $("status").className = "over";
+  state = null;
+  draw();
+};
+
+document.querySelectorAll("#picker button").forEach(b => {
+  b.onclick = () => {
+    sideChoice = b.dataset.color;
+    $("picker").style.display = "none";
+    ws.send(JSON.stringify({type: "new", color: sideChoice}));
+  };
+});
+function newGame() {
+  if (ws.readyState === WebSocket.OPEN && (!state || !state.thinking))
+    ws.send(JSON.stringify({type: "new", color: sideChoice}));
+}
+$("newgame").onclick = newGame;
+document.addEventListener("keydown", e => {
+  if ((e.key === "r" || e.key === "R") && state) newGame();
+});
+
+function humanTurn() {
+  return state && hello && state.result === hello.results.ongoing
+         && state.toMove === state.human && !state.thinking;
+}
+function movesFrom(sq) { return state.moves.filter(m => m[0] === sq); }
+// abs square (a1=0, white POV) <-> screen cell, flipped for black
+function cellOf(sq) {
+  const f = sq & 7, r = sq >> 3;
+  return state.human === WHITE ? [f, 7 - r] : [7 - f, r];
+}
+function sqAt(col, row) {
+  const [f, r] = state.human === WHITE ? [col, 7 - row] : [7 - col, row];
+  return r * 8 + f;
+}
+
+cv.addEventListener("click", ev => {
+  if (!humanTurn()) return;
+  const rect = cv.getBoundingClientRect();
+  const col = Math.floor((ev.clientX - rect.left) / SQ);
+  const row = Math.floor((ev.clientY - rect.top) / SQ);
+  if (col < 0 || col > 7 || row < 0 || row > 7) return;
+
+  if (promo !== null) {
+    const [pcol] = cellOf(promo.to);
+    if (col === pcol && row < hello.promoOrder.length) {
+      const mt = hello.promoOrder[row][0];
+      if (mt in promo.options) {
+        ws.send(JSON.stringify({type: "move", idx: promo.options[mt]}));
+        return;
+      }
+    }
+    promo = null;                            // clicked away: cancel
+    draw();
+    return;
+  }
+
+  const sq = sqAt(col, row);
+  if (selected !== null) {
+    const cands = movesFrom(selected).filter(m => m[1] === sq);
+    if (cands.length === 1) {
+      ws.send(JSON.stringify({type: "move", idx: cands[0][3]}));
+      return;
+    } else if (cands.length > 1) {           // promotions: pick a piece
+      promo = {from: selected, to: sq,
+               options: Object.fromEntries(cands.map(m => [m[2], m[3]]))};
+      selected = null;
+      draw();
+      return;
+    }
+  }
+  const piece = state.board[sq];
+  const own = piece && ((piece <= 6) === (state.human === WHITE));
+  selected = own && movesFrom(sq).length ? sq : null;
+  draw();
+});
+
+function draw() {
+  cx.clearRect(0, 0, 640, 640);
+  // board + coordinates
+  for (let row = 0; row < 8; row++)
+    for (let col = 0; col < 8; col++) {
+      cx.fillStyle = (row + col) % 2 === 0 ? LIGHT : DARK;
+      cx.fillRect(col * SQ, row * SQ, SQ, SQ);
+    }
+  const humanW = !state || state.human === WHITE;
+  cx.font = "15px Arial";
+  for (let col = 0; col < 8; col++) {
+    cx.fillStyle = col % 2 ? DARK : LIGHT;
+    cx.fillText("abcdefgh"[humanW ? col : 7 - col],
+                col * SQ + SQ - 13, 8 * SQ - 6);
+  }
+  for (let row = 0; row < 8; row++) {
+    cx.fillStyle = row % 2 ? LIGHT : DARK;
+    cx.fillText(String((humanW ? 7 - row : row) + 1), 4, row * SQ + 16);
+  }
+  if (!state) return;
+
+  const hl = [];
+  if (state.lastMove) hl.push(...state.lastMove);
+  if (selected !== null) hl.push(selected);
+  cx.fillStyle = HILITE;
+  for (const sq of hl) {
+    const [col, row] = cellOf(sq);
+    cx.fillRect(col * SQ, row * SQ, SQ, SQ);
+  }
+
+  for (let sq = 0; sq < 64; sq++) {
+    const code = state.board[sq];
+    if (!code) continue;
+    const [col, row] = cellOf(sq);
+    cx.drawImage(IMG[code], col * SQ, row * SQ, SQ, SQ);
+  }
+
+  // legal-move markers: dot on empty targets, ring on captures
+  if (selected !== null && humanTurn()) {
+    cx.fillStyle = cx.strokeStyle = DOT;
+    for (const [, t, mt] of movesFrom(selected)) {
+      const [col, row] = cellOf(t);
+      const px = col * SQ + SQ / 2, py = row * SQ + SQ / 2;
+      const capture = state.board[t] !== 0 || mt === hello.enPassant;
+      cx.beginPath();
+      if (capture) {
+        cx.lineWidth = SQ * 0.09;
+        cx.arc(px, py, SQ * 0.425, 0, 2 * Math.PI);
+        cx.stroke();
+      } else {
+        cx.arc(px, py, SQ * 0.16, 0, 2 * Math.PI);
+        cx.fill();
+      }
+    }
+  }
+
+  // promotion picker
+  if (promo !== null) {
+    cx.fillStyle = "rgba(0,0,0,0.35)";
+    cx.fillRect(0, 0, 8 * SQ, 8 * SQ);
+    const [pcol] = cellOf(promo.to);
+    hello.promoOrder.forEach(([mt, kind], i) => {
+      if (!(mt in promo.options)) return;
+      const x = pcol * SQ, y = i * SQ;
+      cx.fillStyle = "rgb(245,245,245)";
+      cx.fillRect(x, y, SQ, SQ);
+      cx.strokeStyle = "rgb(60,60,60)";
+      cx.lineWidth = 1;
+      cx.strokeRect(x + 0.5, y + 0.5, SQ - 1, SQ - 1);
+      const code = kind + (state.human === WHITE ? 0 : 6);
+      cx.drawImage(IMG[code], x, y, SQ, SQ);
+    });
+  }
+}
+
+function render() {
+  draw();
+  const R = hello.results;
+  $("side").textContent =
+    `You play ${state.human === WHITE ? "White" : "Black"}`;
+
+  const st = $("status");
+  if (state.result !== R.ongoing) {
+    const msgs = {
+      [R.checkmate]: (1 - state.toMove) === state.human
+        ? "Checkmate — you win!" : "Checkmate — bot wins",
+      [R.stalemate]: "Draw — stalemate",
+      [R.draw50]: "Draw — 50-move rule",
+      [R.drawRep]: "Draw — repetition",
+    };
+    st.textContent = msgs[state.result];
+    st.className = "over";
+  } else if (state.thinking) {
+    st.className = "busy";
+  } else {
+    st.textContent = "Your move";
+    st.className = "turn";
+  }
+
+  // the bot's search value from its last move, drawn as a white-POV bar
+  // (clamped: heuristic bots report material, NN bots report [-1, 1])
+  if (state.eval !== null) {
+    $("evalwrap").style.visibility = "visible";
+    $("evaltxt").textContent =
+      `Bot eval: ${state.eval >= 0 ? "+" : ""}${state.eval.toFixed(2)}`;
+    let vWhite = (1 - state.human) === WHITE ? state.eval : -state.eval;
+    vWhite = Math.max(-1, Math.min(1, vWhite));
+    $("evalfill").style.width = `${(vWhite + 1) / 2 * 100}%`;
+  } else {
+    $("evalwrap").style.visibility = "hidden";
+  }
+
+  const rows = [];
+  for (let i = 0; i < state.history.length; i += 2)
+    rows.push(`${String(i / 2 + 1).padStart(2)}. `
+              + state.history[i].padEnd(9)
+              + (state.history[i + 1] || ""));
+  $("history").innerHTML = rows.slice(-16)
+    .map(r => `<div>${r.replace(/</g, "&lt;")}</div>`).join("");
+}
+
+setInterval(() => {                          // "Bot is thinking..." animation
+  frame++;
+  if (state && state.thinking)
+    $("status").textContent = "Bot is thinking" + ".".repeat(frame % 4);
+}, 330);
+</script>
+</body>
+</html>

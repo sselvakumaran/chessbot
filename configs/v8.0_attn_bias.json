@@ -1,0 +1,56 @@
+{
+  "version": "v8_attn_bias",
+  "model": {
+    "d_hidden": 256,
+    "n_heads": 4,
+    "n_kv_heads": 2,
+    "n_layers": 2,
+    "mlp_fanout": 1.5,
+    "d_policy": 128,
+    "d_square_value": 32,
+    "d_full_value": 128,
+    "bias_lr_mult": 10.0,
+    "aux": {
+      "moves_left": 0.1
+    }
+  },
+  "n_sims": 96,
+  "node_cap": 97,
+  "n_lanes": 1,
+  "c_puct": 1.5,
+  "temperature": 0.0,
+  "batch_size": 256,
+  "cache_capacity": 8192,
+  "use_fpu": false,
+  "fpu": 0.4,
+  "fpu_root": 0.0,
+  "seed": 42,
+  "device": "mps",
+  "train": {
+    "max_steps": 1000,
+    "lr": 0.0003,
+    "weight_decay": 0.001,
+    "betas": [
+      0.9,
+      0.95
+    ],
+    "eps": 1e-08,
+    "temperature": 0.2,
+    "n_sims": 96,
+    "c_puct": 1.5,
+    "max_plies": 750,
+    "checkpoint_interval": 25,
+    "n_lanes": 128,
+    "buffer_capacity": 1000000,
+    "min_buffer": 20000,
+    "batch_size": 512,
+    "grad_steps": 64,
+    "discount": 0.995,
+    "grad_clip": 1.0,
+    "waves_per_step": 64,
+    "dirichlet_alpha": 0.3,
+    "dirichlet_epsilon": 0.25,
+    "value_frac_trained": 0.25
+  },
+  "autocast": true
+}

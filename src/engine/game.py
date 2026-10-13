@@ -1,24 +1,14 @@
 import ctypes
-import platform
 from dataclasses import dataclass
 from enum import IntEnum
-from pathlib import Path
 import numpy as np
+
+from engine.native import lib as _lib
 
 # ctypes layer over batching.cpp's GameManager. One manager owns all B lanes;
 # every call crosses the FFI once for the whole batch. The tree API is fully
 # LOCAL: a node is (state idx, action idx local to that state) per lane, so
 # search stats live in numpy keyed [lane, state, action]. Root is state 0.
-
-_lib_name = "../../lib/libchess.dylib" \
-  if platform.system() == "Darwin" \
-  else "../../lib/libchess.so"
-_lib_path = Path(__file__).resolve().parent / _lib_name
-if not _lib_path.exists():
-  raise FileNotFoundError(
-    f"{_lib_path} not found — please run with make"
-  )
-_lib = ctypes.CDLL(str(_lib_path))
 
 _lib.game_max_moves_capacity.restype = ctypes.c_int
 MAX_MOVES_CAPACITY = _lib.game_max_moves_capacity()
@@ -36,6 +26,18 @@ _lib.gamebatch_get_children.argtypes = [ctypes.c_void_p] + [ctypes.c_void_p] * 5
 _lib.gamebatch_encode.argtypes = \
   [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int] \
   + [ctypes.c_void_p] * 7
+_lib.gamebatch_copy_lane.argtypes = [
+  ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int, ctypes.c_int
+]
+_lib.gamebatch_hash.argtypes = \
+  [ctypes.c_void_p] + [ctypes.c_void_p] * 2 + [ctypes.c_int, ctypes.c_void_p]
+
+_lib.gamebatch_search_keys.argtypes = \
+  [ctypes.c_void_p] * 3 + [ctypes.c_int, ctypes.c_void_p]
+_lib.gamebatch_search_keys.restype = None
+_lib.gamebatch_in_check.argtypes = \
+  [ctypes.c_void_p] * 3 + [ctypes.c_int, ctypes.c_void_p]
+_lib.gamebatch_in_check.restype = None
 
 class Color(IntEnum):
   WHITE = 0
@@ -256,20 +258,29 @@ class GameBatch:
 
   def play_batch(self, actions: np.ndarray, mask: np.ndarray | None = None) -> np.ndarray:
     out = np.zeros(len(self), np.int8)
-    _lib.gamebatch_play(self._gamebatch, _ptr(_i32(actions)), _ptr(_mask(mask)), _ptr(out))
+    # converted arrays held in locals: _ptr keeps only the address, so a temporary
+    # would be freed before the C call reads it
+    actions, mask = _i32(actions), _mask(mask)
+    _lib.gamebatch_play(self._gamebatch, _ptr(actions), _ptr(mask), _ptr(out))
     self._roots_stale = True
     return out
 
   def reset_where(self, mask: np.ndarray | None = None) -> None:
     """Resets lanes where mask (all lanes if None)."""
-    _lib.gamebatch_reset(self._gamebatch, _ptr(_mask(mask)))
+    mask = _mask(mask)
+    _lib.gamebatch_reset(self._gamebatch, _ptr(mask))
     self._roots_stale = True
 
   def reset_trees(self, mask: np.ndarray | None = None) -> None:
     """Frees the search arenas (positions unchanged, root back to state 0).
     Searches must call this first: the arena only otherwise resets on
     play/reset, so back-to-back searches accumulate until overflow."""
-    _lib.gamebatch_reset_trees(self._gamebatch, _ptr(_mask(mask)))
+    mask = _mask(mask)
+    _lib.gamebatch_reset_trees(self._gamebatch, _ptr(mask))
+  
+  def copy_lane_from(self, src: "GameBatch", src_lane: int, dst_lane: int = 0) -> None:
+    _lib.gamebatch_copy_lane(self._gamebatch, src._gamebatch, dst_lane, src_lane)
+    self._roots_stale = True
 
   # ---- search tree (root = state 0; tree resets on every play/reset) ----
   def get_children(self, parent_states: np.ndarray, actions: np.ndarray) -> tuple:
@@ -279,8 +290,9 @@ class GameBatch:
     s = np.full(len(self), -1, np.int32)
     n = np.zeros(len(self), np.int32)
     r = np.zeros(len(self), np.int8)
+    parent_states, actions = _i32(parent_states), _i32(actions)
     _lib.gamebatch_get_children(
-      self._gamebatch, _ptr(_i32(parent_states)), _ptr(_i32(actions)),
+      self._gamebatch, _ptr(parent_states), _ptr(actions),
       _ptr(s), _ptr(n), _ptr(r),
     )
     return s, n, r
@@ -311,6 +323,63 @@ class GameBatch:
       self.moves[:n],
       self.num_moves[:n],
     )
+
+  def search_keys(self, lanes: np.ndarray | None = None,
+                  states: np.ndarray | None = None) -> np.ndarray:
+    """Position hash, repetition-history fingerprint and halfmove clock.
+
+    Unlike hashes(), these keys are suitable for path-dependent search scores.
+    They include occurrence counts since the last pawn move/capture.
+    """
+    if lanes is None:
+      lanes = np.arange(len(self), dtype=np.int32)
+    if states is None:
+      states = np.zeros(len(lanes), np.int32)
+    lanes, states = _i32(lanes), _i32(states)
+    if lanes.ndim != 1 or states.shape != lanes.shape:
+      raise ValueError("lanes and states must have matching one-dimensional shapes")
+    if np.any(lanes < 0) or np.any(lanes >= len(self)):
+      raise ValueError("lane index out of range")
+    if np.any(states < 0) or np.any(states >= self.states_cap):
+      raise ValueError("state index out of range")
+    out = np.zeros((len(lanes), 3), np.uint64)
+    _lib.gamebatch_search_keys(
+      self._gamebatch, _ptr(lanes), _ptr(states), len(lanes), _ptr(out))
+    return out
+
+  def in_check(self, lanes: np.ndarray | None = None,
+               states: np.ndarray | None = None) -> np.ndarray:
+    """Whether the side to move is in check at each requested state."""
+    if lanes is None:
+      lanes = np.arange(len(self), dtype=np.int32)
+    if states is None:
+      states = np.zeros(len(lanes), np.int32)
+    lanes, states = _i32(lanes), _i32(states)
+    if lanes.ndim != 1 or states.shape != lanes.shape:
+      raise ValueError("lanes and states must be matching one-dimensional arrays")
+    if np.any(lanes < 0) or np.any(lanes >= len(self)):
+      raise ValueError("lane index out of range")
+    if np.any(states < 0) or np.any(states >= self.states_cap):
+      raise ValueError("state index out of range")
+    out = np.zeros(len(lanes), np.uint8)
+    _lib.gamebatch_in_check(
+      self._gamebatch, _ptr(lanes), _ptr(states), len(lanes), _ptr(out))
+    return out.astype(bool)
+
+  def hashes(self, lanes: np.ndarray | None = None,
+             states: np.ndarray | None = None) -> np.ndarray:
+    """Zobrist hash of (lanes[i], states[i]): pieces, castling rights, en
+    passant file, side to move — NOT the halfmove clock or repetition count.
+    Defaults to every lane's root."""
+    if lanes is None:
+      lanes = np.arange(len(self), dtype=np.int32)
+    if states is None:
+      states = np.zeros(len(lanes), np.int32)
+    lanes, states = _i32(lanes), _i32(states)
+    out = np.zeros(len(lanes), np.uint64)
+    _lib.gamebatch_hash(
+      self._gamebatch, _ptr(lanes), _ptr(states), len(lanes), _ptr(out))
+    return out
 
   def get_encoding(self) -> tuple:
     """Root encoding of every lane (old game.py interface)."""

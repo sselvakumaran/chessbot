@@ -1,0 +1,26 @@
+{
+  "version": "v2_basic_nn",
+  "model": {
+    "d_l1": 256,
+    "d_l2": 128,
+    "negative_slope": 0.01
+  },
+  "train": {
+    "max_steps": 0,
+    "lr": 0.0006,
+    "temperature": 0.05,
+    "discount": 0.995,
+    "max_plies": 300,
+    "weight_decay": 0.0001,
+    "checkpoint_interval": 25,
+    "betas": [0.9, 0.95],
+    "eps": 1e-8
+  },
+  "max_depth": 3,
+  "max_search_nodes": 65536,
+  "mate_value": 1000.0,
+  "seed": 42,
+  "temperature": 0.0,
+  "device": "cpu",
+  "compile": true
+}
