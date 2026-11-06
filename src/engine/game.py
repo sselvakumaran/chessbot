@@ -209,14 +209,8 @@ class GameBatch:
     self._root_to_move = np.zeros(B, np.int8)
     self._roots_stale = True
 
-    # encode buffers
-    self.board = np.zeros((B, 64), np.uint8)
-    self.castling = np.zeros((B,), np.uint8)
-    self.ep = np.zeros((B,), np.int8)
-    self.rep = np.zeros((B,), np.uint8)
-    self.clock = np.zeros((B,), np.uint8)
-    self.moves = np.zeros((B, MAX_MOVES_CAPACITY, 4), np.uint8)
-    self.num_moves = np.zeros((B,), np.int32)
+    # encode buffers (grown by encode when one call asks for more rows than there are lanes)
+    self._alloc_encode(B)
 
   def __del__(self):
     if not getattr(self, "_gamebatch", None):
@@ -224,7 +218,16 @@ class GameBatch:
     _lib.gamebatch_free(self._gamebatch)
     self._gamebatch = None
 
-  def __len__(self) -> int: return len(self.board)
+  def __len__(self) -> int: return self.gamebatch_size
+
+  def _alloc_encode(self, rows: int):
+    self.board = np.zeros((rows, 64), np.uint8)
+    self.castling = np.zeros((rows,), np.uint8)
+    self.ep = np.zeros((rows,), np.int8)
+    self.rep = np.zeros((rows,), np.uint8)
+    self.clock = np.zeros((rows,), np.uint8)
+    self.moves = np.zeros((rows, MAX_MOVES_CAPACITY, 4), np.uint8)
+    self.num_moves = np.zeros((rows,), np.int32)
 
   def __getitem__(self, i: int) -> Game:
     return Game(self, i)
@@ -309,6 +312,8 @@ class GameBatch:
       states = np.zeros(len(lanes), np.int32)
     lanes, states = _i32(lanes), _i32(states)
     n = len(lanes)
+    if n > len(self.board):                  # several leaves per lane (v11 search): more rows than lanes
+      self._alloc_encode(max(n, 2 * len(self.board)))
     _lib.gamebatch_encode(
       self._gamebatch, _ptr(lanes), _ptr(states), n,
       _ptr(self.board), _ptr(self.castling), _ptr(self.ep),

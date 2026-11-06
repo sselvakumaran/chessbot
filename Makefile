@@ -1,5 +1,5 @@
 CXX ?= c++
-CXXFLAGS ?= -std=c++20 -O2 -shared -fPIC
+CXXFLAGS ?= -std=c++20 -O2 -Wall -Wextra -shared -fPIC
 
 ENGINE_DIR := src/engine
 LIB_DIR := lib

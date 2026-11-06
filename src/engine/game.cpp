@@ -147,6 +147,23 @@ public:
   }
   int to_move() const { return (int) root_board_.to_move; }
 
+  void action_flags(int s, uint8_t* out) const {
+    const State& state = states_[s];
+    for (int i = 0; i < state.num_actions; i++) {
+      Move move = actions_[state.actions_offset + i].move;
+      uint8_t flags = 0;
+      if (state.board.mailbox[move.to()] != 0 || move.flag() == MoveFlag::ENPASSANT)
+        flags |= 1;
+      if (move.flag() == MoveFlag::PROMOTION)
+        flags |= 2;
+      Board board = state.board;
+      make_move(board, move);
+      if (::in_check(board, board.to_move))
+        flags |= 4;
+      out[i] = flags;
+    }
+  }
+
   int encode(
     int s_idx, 
     uint8_t* board_out,
