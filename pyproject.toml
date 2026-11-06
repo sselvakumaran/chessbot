@@ -1,0 +1,20 @@
+[project]
+name = "chessbot"
+version = "0.0.1"
+requires-python = ">=3.11"
+dependencies = ["numpy", "torch", "tornado"]
+
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+# src layout: `pip install -e .` puts src/ on the import path, so any script
+# anywhere (tests/, experiments/, a notebook) can `from arena import Arena`
+# with the venv active — no sys.path hacks, and edits apply immediately.
+[tool.setuptools]
+package-dir = {"" = "src"}
+py-modules = ["arena", "bot_base", "human_arena", "run", "train", "trainer_base"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+namespaces = true

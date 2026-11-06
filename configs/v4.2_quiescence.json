@@ -1,0 +1,30 @@
+{
+  "version": "v4_quiescence",
+  "model": {
+    "d_embed": 256,
+    "d_head": 32
+  },
+  "max_depth": 4,
+  "q_depth": 8,
+  "max_nodes": 12000,
+  "tree_cap": 32768,
+  "sim_cap": 64,
+  "seed": 42,
+  "device": "cpu",
+  "train": {
+    "max_steps": 1000,
+    "max_depth": 3,
+    "lr": 0.0003,
+    "temperature": 0.05,
+    "max_plies": 300,
+    "n_lanes": 32,
+    "buffer_capacity": 500000,
+    "min_buffer": 5000,
+    "batch_size": 512,
+    "grad_steps": 32,
+    "discount": 0.99,
+    "checkpoint_interval": 25
+  },
+  "root_prefetch": true,
+  "tt_capacity": 50000
+}
