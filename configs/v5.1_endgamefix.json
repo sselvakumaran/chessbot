@@ -1,5 +1,5 @@
 {
-  "version": "v5_1_transformer",
+  "version": "v5_transformer",
   "model": {
     "max_moves": 48,
     "d_hidden": 256,

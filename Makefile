@@ -36,4 +36,4 @@ $(LIB): $(UNITY) $(ENGINE) $(MODULES)
 	$(CXX) $(CXXFLAGS) -I src $(UNITY) -o $@
 
 clean:
-	rm -f $(LIB_DIR)/libchess.dylib $(LIB_DIR)/libchess.so $(BUILD_DIR)
+	rm -rf $(LIB_DIR)/libchess.dylib $(LIB_DIR)/libchess.so $(BUILD_DIR)

@@ -1,5 +1,5 @@
 # v5: shallow transformer (policy + WDL value) with AlphaZero-style PUCT MCTS.
-# See bots/v3_nnue_inspired/CHANGELOG.md ("V5 PLAN") for the search contract.
+# See IDEAS.md ("V5 PLAN") for the search contract.
 
 from dataclasses import dataclass, field
 import copy
