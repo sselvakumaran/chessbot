@@ -2,6 +2,7 @@ from dataclasses import fields, is_dataclass
 from pathlib import Path
 from typing import Any, TextIO, TypeVar, get_origin, get_type_hints
 import json
+import time
 
 import torch
 
@@ -54,8 +55,11 @@ class Run:
     config_path: str | Path,
     *,
     configs_dir: str | Path = "configs",
-    runs_dir: str | Path = "runs"
+    runs_dir: str | Path = "runs",
+    duty: float = 1.0
   ):
+    assert 0 < duty <= 1, f"duty {duty} not in (0, 1]"
+    self.duty, self._last_log = duty, time.time()
     config_path = Path(config_path)
     if config_path.parent == Path("."):
       config_path = Path(configs_dir) / config_path
@@ -188,6 +192,9 @@ class Run:
       )
     record = {"step": step, **metrics}
     self.metrics_fp.write(json.dumps(record) + "\n")
+    # duty < 1: rest (1 / duty - 1) x the step's own time. the tuner counts cost from the logged work, so rests are free
+    time.sleep((time.time() - self._last_log) * (1 / self.duty - 1))
+    self._last_log = time.time()
 
   def complete(self) -> None:
     if self.metrics_fp is not None:

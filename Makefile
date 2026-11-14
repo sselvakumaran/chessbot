@@ -16,7 +16,7 @@ else
   LIB := $(LIB_DIR)/libchess.so
 endif
 
-.PHONY: all clean train FORCE
+.PHONY: all clean train tune FORCE
 all: $(LIB)
 
 # usage: make train CONFIG=v4_quiescence
@@ -24,6 +24,18 @@ all: $(LIB)
 # -s system sleep while on AC power)
 train: $(LIB)
 	caffeinate -is venv/bin/python -m train $(CONFIG)
+
+# usage: make tune NAME [-- FLAGS]     e.g.  make tune protein-2 -- --duty 0.5 --hours 9.5 --host m2-pro
+# runs the Protein sweep configs/sweeps/NAME.json (default protein-2) until stopped (ctrl-c; the same command continues).
+# FLAGS go to `python -m tune` unchanged; make itself rejects --flags, so they come after --
+ifeq (tune,$(firstword $(MAKECMDGOALS)))
+  TUNE_ARGS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
+  TUNE_NAME := $(if $(filter -%,$(firstword $(TUNE_ARGS))),,$(firstword $(TUNE_ARGS)))
+  TUNE_FLAGS := $(if $(TUNE_NAME),$(wordlist 2,$(words $(TUNE_ARGS)),$(TUNE_ARGS)),$(TUNE_ARGS))
+  $(eval $(TUNE_ARGS):;@:)
+endif
+tune: $(LIB)
+	caffeinate -is venv/bin/python -m tune configs/sweeps/$(or $(TUNE_NAME),protein-2).json $(TUNE_FLAGS)
 
 $(UNITY): FORCE
 	@mkdir -p $(BUILD_DIR)
