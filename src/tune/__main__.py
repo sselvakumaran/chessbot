@@ -1,6 +1,6 @@
 """Protein sweep (tune/protein.py) of a run recipe. Runs until stopped: ctrl-c or a closed terminal is a pause, and the
 same command continues the run in flight.
-  python -m tune configs/sweeps/protein-2.json [--hours H] [--background | --duty D] [--host NAME]
+  python -m tune configs/sweeps/protein-2.json [--hours H] [--background | --duty D] [--host NAME] [--max-hours H]
   make tune protein-2 -- --duty 0.5                     the same through make (caffeinate)
 Everything is in <runs_dir>/<name>/:
   observations-<host>.jsonl   one line per scored point, appended only by that PC
@@ -91,6 +91,7 @@ def main() -> None:
   parser.add_argument("--background", action="store_true", help="low priority, rests (--duty 0.25)")
   parser.add_argument("--duty", type=float, help="share of the time the trainer works, (0, 1]; implies --background")
   parser.add_argument("--host", default=socket.gethostname().split(".")[0].lower(), help="this PC's name in the sweep")
+  parser.add_argument("--max-hours", type=float, help="this PC picks only runs predicted under this many clean hours")
   args = parser.parse_args()
   if args.duty is None: args.duty = 0.25 if args.background else 1.0
   assert 0 < args.duty <= 1, "--duty must be in (0, 1]"
@@ -98,6 +99,7 @@ def main() -> None:
   signal.signal(signal.SIGHUP, signal.default_int_handler) # a closed terminal is a pause, like ctrl-c
 
   sweep = SweepConfig(**json.loads(Path(args.config).read_text()))
+  if args.max_hours is None: args.max_hours = sweep.max_hours # e.g. a slower PC takes the cheaper runs
   recipe = json.loads(Path(sweep.recipe).read_text())
   # clean seconds of a logged step from its counted work (cost is the same on any PC and has no pauses). Self-play is
   # double buffered: per GPU batch the step pays max(CPU, GPU), smoothed with power K. Parameters: d extra share of
@@ -120,7 +122,7 @@ def main() -> None:
       for k, s in sweep.space.items()
     },
     {k: s["default"] for k, s in sweep.space.items()},
-    basis, sweep.cost_dims, sweep.max_hours * 3600, sweep.alpha,
+    basis, sweep.cost_dims, args.max_hours * 3600, sweep.alpha,
     seed=zlib.crc32(args.host.encode()) # each PC draws its own candidates
   )
   snap = lambda values: {
