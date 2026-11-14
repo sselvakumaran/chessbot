@@ -1,0 +1,207 @@
+{
+ "name": "protein-2",
+ "recipe": "configs/v12.0_slim.json",
+ "step_time": "configs/sweeps/step_time_m5pro.json",
+ "score": {
+  "positions": "~/dev/apps/chessbot_ablations/74_night_unormuon/positions_all.jsonl",
+  "labels": "~/dev/apps/chessbot_ablations/74_night_unormuon/labels_all.jsonl",
+  "sims": 96,
+  "lanes": 256,
+  "device": "mps"
+ },
+ "points": 5,
+ "max_hours": 8.0,
+ "alpha": 1.25,
+ "fixed": {
+  "train.resign_after": 0
+ },
+ "cost_dims": [
+  "steps",
+  "n_sims",
+  "fast_share",
+  "cand_share",
+  "pcr_p",
+  "batch_size"
+ ],
+ "snap": {
+  "batch_size": 16,
+  "steps": 5
+ },
+ "space": {
+  "steps": {
+   "path": "train.max_steps",
+   "lo": 200,
+   "hi": 24000,
+   "kind": "log",
+   "integer": true,
+   "default": 200
+  },
+  "lr": {
+   "path": "train.lr",
+   "lo": 3e-05,
+   "hi": 0.01,
+   "kind": "log",
+   "default": 0.0012
+  },
+  "min_lr_ratio": {
+   "path": "train.min_lr_ratio",
+   "lo": 0.0,
+   "hi": 0.5,
+   "default": 0.0
+  },
+  "weight_decay": {
+   "path": "train.weight_decay",
+   "lo": 0.001,
+   "hi": 0.2,
+   "kind": "log",
+   "default": 0.1
+  },
+  "adamw_weight_decay": {
+   "path": "train.adamw_weight_decay",
+   "lo": 0.001,
+   "hi": 0.2,
+   "kind": "log",
+   "default": 0.1
+  },
+  "muon_lr_mult": {
+   "path": "train.muon_lr_mult",
+   "lo": 0.25,
+   "hi": 4.0,
+   "kind": "log",
+   "default": 1.0
+  },
+  "muon_momentum": {
+   "path": "train.muon_momentum",
+   "lo": 0.8,
+   "hi": 0.9875,
+   "kind": "logit",
+   "default": 0.95
+  },
+  "bias_lr_mult": {
+   "path": "model.bias_lr_mult",
+   "lo": 2.5,
+   "hi": 40.0,
+   "kind": "log",
+   "default": 10.0
+  },
+  "grad_clip": {
+   "path": "train.grad_clip",
+   "lo": 0.25,
+   "hi": 4.0,
+   "kind": "log",
+   "default": 1.0
+  },
+  "batch_size": {
+   "path": "train.batch_size",
+   "lo": 512,
+   "hi": 4096,
+   "kind": "log",
+   "integer": true,
+   "default": 2048
+  },
+  "value_weight": {
+   "path": "train.value_weight",
+   "lo": 0.25,
+   "hi": 4.0,
+   "kind": "log",
+   "default": 1.0
+  },
+  "rootq_alpha": {
+   "path": "train.rootq_alpha",
+   "lo": 0.0,
+   "hi": 0.9,
+   "default": 0.75
+  },
+  "discount": {
+   "path": "train.discount",
+   "lo": 0.98,
+   "hi": 0.9999,
+   "kind": "logit",
+   "default": 0.995
+  },
+  "moves_left_w": {
+   "path": "model.aux.moves_left",
+   "lo": 0.025,
+   "hi": 1.0,
+   "kind": "log",
+   "default": 0.1
+  },
+  "n_sims": {
+   "path": "train.n_sims",
+   "lo": 8,
+   "hi": 576,
+   "kind": "log",
+   "integer": true,
+   "default": 96
+  },
+  "fast_share": {
+   "path": "train.fast_sims",
+   "share_of": "train.n_sims",
+   "min": 2,
+   "lo": 0.02,
+   "hi": 0.33,
+   "kind": "log",
+   "default": 0.0417
+  },
+  "cand_share": {
+   "path": "gumbel_m",
+   "share_of": "train.n_sims",
+   "min": 2,
+   "max": 32,
+   "lo": 0.04,
+   "hi": 0.67,
+   "kind": "log",
+   "default": 0.1667
+  },
+  "c_visit": {
+   "path": "c_visit",
+   "lo": 12.5,
+   "hi": 200.0,
+   "kind": "log",
+   "default": 50.0
+  },
+  "c_scale": {
+   "path": "c_scale",
+   "lo": 0.1,
+   "hi": 4.0,
+   "kind": "log",
+   "default": 1.0
+  },
+  "c_puct": {
+   "path": "train.c_puct",
+   "lo": 0.75,
+   "hi": 3.0,
+   "kind": "log",
+   "default": 1.5
+  },
+  "fpu": {
+   "path": "fpu",
+   "lo": 0.1,
+   "hi": 0.6,
+   "kind": "log",
+   "default": 0.4
+  },
+  "pcr_p": {
+   "path": "train.pcr_p",
+   "lo": 0.125,
+   "hi": 0.5,
+   "kind": "log",
+   "default": 0.25
+  },
+  "gumbel_scale": {
+   "path": "train.gumbel_scale",
+   "lo": 0.5,
+   "hi": 2.0,
+   "kind": "log",
+   "default": 1.0
+  },
+  "opening_noise": {
+   "path": "train.opening_noise_plies",
+   "lo": 8,
+   "hi": 120,
+   "kind": "log",
+   "integer": true,
+   "default": 30
+  }
+ }
+}
