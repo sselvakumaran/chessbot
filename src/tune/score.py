@@ -27,7 +27,8 @@ def main() -> None:
   games = [positions[r["id"]] for r in labels]
   recipe = json.loads(Path(sweep["recipe"]).read_text())
   play = {k: v for k, v in recipe.items() if k not in ("version", "model", "train")}
-  play.update(n_lanes=s["lanes"], n_sims=s["sims"], device=s["device"], node_cap=max(recipe["node_cap"], s["sims"] + 1))
+  device = json.loads((run_dir / "config.json").read_text())["device"] # scored on the device the run trained on
+  play.update(n_lanes=s["lanes"], n_sims=s["sims"], device=device, node_cap=max(recipe["node_cap"], s["sims"] + 1))
 
   # one lane per game, replayed to the end of its move list
   batch = GameBatch(len(games), sim_cap=play["node_cap"])

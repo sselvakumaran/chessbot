@@ -3,11 +3,10 @@
  "recipe": "configs/v12.0_slim.json",
  "step_time": "configs/sweeps/step_time_m5pro.json",
  "score": {
-  "positions": "~/dev/apps/chessbot_ablations/74_night_unormuon/positions_all.jsonl",
-  "labels": "~/dev/apps/chessbot_ablations/74_night_unormuon/labels_all.jsonl",
+  "positions": "data/scoring/positions_all.jsonl",
+  "labels": "data/scoring/labels_all.jsonl",
   "sims": 96,
-  "lanes": 256,
-  "device": "mps"
+  "lanes": 256
  },
  "points": 5,
  "max_hours": 8.0,

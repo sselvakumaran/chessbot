@@ -33,7 +33,8 @@ def main() -> None:
   parser.add_argument("--runs-dir", default="runs")
   parser.add_argument("--duty", type=float, default=1.0, help="share of the time spent training, (0, 1]")
   args = parser.parse_args()
-  signal.signal(signal.SIGHUP, signal.default_int_handler) # a closed terminal stops like ctrl-c: a checkpoint first
+  # a closed terminal or a shutdown (SIGTERM) stops like ctrl-c: a checkpoint first
+  for sig in (signal.SIGHUP, signal.SIGTERM): signal.signal(sig, signal.default_int_handler)
   train_run(args.config, configs_dir=args.configs_dir, runs_dir=args.runs_dir, duty=args.duty)
 
 if __name__ == "__main__":

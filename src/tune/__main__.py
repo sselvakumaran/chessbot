@@ -1,13 +1,14 @@
-"""Protein sweep (tune/protein.py) of a run recipe. Runs until stopped: ctrl-c or a closed terminal is a pause, and the
-same command continues the run in flight.
+"""Protein sweep (tune/protein.py) of a run recipe. Runs until stopped: ctrl-c, a closed terminal or SIGTERM is a pause,
+and the same command continues the run in flight.
   python -m tune configs/sweeps/protein-2.json [--hours H] [--background | --duty D] [--host NAME] [--max-hours H]
+                                               [--device DEVICE]
   make tune protein-2 -- --duty 0.5                     the same through make (caffeinate)
 Everything is in <runs_dir>/<name>/:
   observations-<host>.jsonl   one line per scored point, appended only by that PC
   pending-<host>.json         that PC's run in flight
   <host>-NNN/                 the runs (config, metrics, logs, final checkpoint)
-Several PCs: give each its own --host (default: the hostname) and now and then copy each PC's observations-<host>.jsonl
-into the other PCs' sweep folders. Every pick reads all observations-*.jsonl."""
+Several PCs: give each its own --host (default: the hostname) and now and then move a bundle between them
+(tools/export.sh, tools/import.sh; a CUDA machine: tools/worker.sh). Every pick reads all observations-*.jsonl."""
 from dataclasses import dataclass, field
 from functools import reduce
 from pathlib import Path
@@ -33,7 +34,7 @@ class SweepConfig:
   name: str
   recipe: str # the run config every run starts from
   space: dict[str, dict[str, Any]] # name -> {path, default, lo, hi, kind, integer, scale} (+ share_of, min, max)
-  score: dict[str, Any] # {positions, labels, sims, lanes, device} (tune/score.py)
+  score: dict[str, Any] # {positions, labels, sims, lanes} (tune/score.py; scored on the run's device)
   step_time: str # reference machine's step-time parameters
   runs_dir: str = "runs/sweeps"
   points: int = 5 # scored at 1/points .. 100% of each run
@@ -92,13 +93,16 @@ def main() -> None:
   parser.add_argument("--duty", type=float, help="share of the time the trainer works, (0, 1]; implies --background")
   parser.add_argument("--host", default=socket.gethostname().split(".")[0].lower(), help="this PC's name in the sweep")
   parser.add_argument("--max-hours", type=float, help="this PC picks only runs predicted under this many clean hours")
+  parser.add_argument("--device", help="train and score on this device (default: the recipe's)")
   args = parser.parse_args()
   if args.duty is None: args.duty = 0.25 if args.background else 1.0
   assert 0 < args.duty <= 1, "--duty must be in (0, 1]"
   if args.background or args.duty < 1: os.nice(15)
-  signal.signal(signal.SIGHUP, signal.default_int_handler) # a closed terminal is a pause, like ctrl-c
+  # a closed terminal or a shutdown (SIGTERM) is a pause, like ctrl-c
+  for sig in (signal.SIGHUP, signal.SIGTERM): signal.signal(sig, signal.default_int_handler)
 
   sweep = SweepConfig(**json.loads(Path(args.config).read_text()))
+  if args.device: sweep.fixed["device"] = args.device
   if args.max_hours is None: args.max_hours = sweep.max_hours # e.g. a slower PC takes the cheaper runs
   recipe = json.loads(Path(sweep.recipe).read_text())
   # clean seconds of a logged step from its counted work (cost is the same on any PC and has no pauses). Self-play is
