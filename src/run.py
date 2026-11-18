@@ -180,8 +180,10 @@ class Run:
     if not path.is_file():
       raise FileNotFoundError(path)
 
+    # to the CPU: a checkpoint saved on one device (mps, cuda) loads on any machine; load_state_dict moves it
     return torch.load(
       path,
+      map_location="cpu",
       weights_only=False
     )
 
