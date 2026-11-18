@@ -2,7 +2,7 @@
 # set up a Linux machine with NVIDIA GPUs (bf16: RTX 30xx / A100 or newer) for a sweep and start its tuners in the tmux
 # session "chessbot": WORKERS_PER_GPU per GPU, each its own host NAME-g<gpu>w<n>. Copy this file and a bundle
 # (tools/export.sh) to the machine, then
-#   bash worker.sh BUNDLE.tar.gz NAME       env: WORKERS_PER_GPU (2), MAX_HOURS (8), SWEEP (protein-2), BRANCH (main)
+#   bash worker.sh BUNDLE.tar.gz NAME       env: WORKERS_PER_GPU (1), MAX_HOURS (8), SWEEP (protein-2), BRANCH (main)
 # NAME: one per machine, never reused. Run it again with a newer bundle while the tuners run: imports it, nothing else.
 # Not running (a reboot, or tmux kill-session -t chessbot, which pauses the tuners with a checkpoint): pulls the newest
 # code, rebuilds, imports the bundle and starts the tuners; each continues its run in flight.
@@ -10,7 +10,7 @@
 set -euo pipefail
 [ $# -eq 2 ] || { echo "usage: bash worker.sh BUNDLE.tar.gz NAME"; exit 1; }
 bundle=$(realpath "$1") name=$2
-repo=~/chessbot sweep=${SWEEP:-protein-2} per_gpu=${WORKERS_PER_GPU:-2}
+repo=~/chessbot sweep=${SWEEP:-protein-2} per_gpu=${WORKERS_PER_GPU:-1}
 if tmux has-session -t chessbot 2>/dev/null; then exec bash "$repo/tools/import.sh" "$bundle"; fi
 
 { command -v git && command -v tmux && command -v c++ && command -v curl; } >/dev/null ||
