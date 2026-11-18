@@ -153,9 +153,10 @@ class Chessbot(ChessbotBase):
     if self.config.fused and self.infer_model.can_infer():
       out = self.infer_model.infer(packed, M)       # (rows, M + 1): probabilities, then value
     elif rows and packed.is_cuda:
-      # CUDA self-play (always `rows` rows): one CUDA graph per move width, not a kernel launch per op
+      # CUDA self-play (always `rows` rows): one CUDA graph per move width, not a kernel launch per op. max-autotune also
+      # tunes the matmuls for this GPU (RTX 5090, 051's settings: 0.41 s per step vs 0.54 with reduce-overhead)
       if self._graphs is None:
-        self._graphs = torch.compile(self._network, mode="reduce-overhead", dynamic=False)
+        self._graphs = torch.compile(self._network, mode="max-autotune", dynamic=False)
       torch.compiler.cudagraph_mark_step_begin()
       out = self._graphs(packed, M)
     else:
