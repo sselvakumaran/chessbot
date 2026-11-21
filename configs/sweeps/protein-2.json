@@ -93,7 +93,7 @@
   "batch_size": {
    "path": "train.batch_size",
    "lo": 256,
-   "hi": 4096,
+   "hi": 8192,
    "kind": "log",
    "integer": true,
    "default": 2048
