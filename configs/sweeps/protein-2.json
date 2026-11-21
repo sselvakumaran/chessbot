@@ -3,11 +3,10 @@
  "recipe": "configs/v12.0_slim.json",
  "step_time": "configs/sweeps/step_time_m5pro.json",
  "score": {
-  "positions": "~/dev/apps/chessbot_ablations/74_night_unormuon/positions_all.jsonl",
-  "labels": "~/dev/apps/chessbot_ablations/74_night_unormuon/labels_all.jsonl",
+  "positions": "data/scoring/positions_all.jsonl",
+  "labels": "data/scoring/labels_all.jsonl",
   "sims": 96,
-  "lanes": 256,
-  "device": "mps"
+  "lanes": 256
  },
  "points": 5,
  "max_hours": 8.0,
@@ -31,7 +30,7 @@
   "steps": {
    "path": "train.max_steps",
    "lo": 200,
-   "hi": 24000,
+   "hi": 96000,
    "kind": "log",
    "integer": true,
    "default": 200
@@ -52,14 +51,14 @@
   "weight_decay": {
    "path": "train.weight_decay",
    "lo": 0.001,
-   "hi": 0.2,
+   "hi": 1.0,
    "kind": "log",
    "default": 0.1
   },
   "adamw_weight_decay": {
    "path": "train.adamw_weight_decay",
    "lo": 0.001,
-   "hi": 0.2,
+   "hi": 1.0,
    "kind": "log",
    "default": 0.1
   },
@@ -73,7 +72,7 @@
   "muon_momentum": {
    "path": "train.muon_momentum",
    "lo": 0.8,
-   "hi": 0.9875,
+   "hi": 0.995,
    "kind": "logit",
    "default": 0.95
   },
@@ -93,8 +92,8 @@
   },
   "batch_size": {
    "path": "train.batch_size",
-   "lo": 512,
-   "hi": 4096,
+   "lo": 256,
+   "hi": 8192,
    "kind": "log",
    "integer": true,
    "default": 2048
@@ -115,20 +114,20 @@
   "discount": {
    "path": "train.discount",
    "lo": 0.98,
-   "hi": 0.9999,
+   "hi": 0.99999,
    "kind": "logit",
    "default": 0.995
   },
   "moves_left_w": {
    "path": "model.aux.moves_left",
-   "lo": 0.025,
+   "lo": 0.0025,
    "hi": 1.0,
    "kind": "log",
    "default": 0.1
   },
   "n_sims": {
    "path": "train.n_sims",
-   "lo": 8,
+   "lo": 4,
    "hi": 576,
    "kind": "log",
    "integer": true,
@@ -163,41 +162,41 @@
   "c_scale": {
    "path": "c_scale",
    "lo": 0.1,
-   "hi": 4.0,
+   "hi": 8.0,
    "kind": "log",
    "default": 1.0
   },
   "c_puct": {
    "path": "train.c_puct",
    "lo": 0.75,
-   "hi": 3.0,
+   "hi": 6.0,
    "kind": "log",
    "default": 1.5
   },
   "fpu": {
    "path": "fpu",
    "lo": 0.1,
-   "hi": 0.6,
+   "hi": 2.0,
    "kind": "log",
    "default": 0.4
   },
   "pcr_p": {
    "path": "train.pcr_p",
    "lo": 0.125,
-   "hi": 0.5,
+   "hi": 1.0,
    "kind": "log",
    "default": 0.25
   },
   "gumbel_scale": {
    "path": "train.gumbel_scale",
    "lo": 0.5,
-   "hi": 2.0,
+   "hi": 4.0,
    "kind": "log",
    "default": 1.0
   },
   "opening_noise": {
    "path": "train.opening_noise_plies",
-   "lo": 8,
+   "lo": 2,
    "hi": 120,
    "kind": "log",
    "integer": true,

@@ -1,7 +1,7 @@
 # v11: v10 (C++ Gumbel search, double-buffered self-play) trained with Muon (optimizer.py) and opening noise on by default
 # (fast searches sample their move for the first 30 plies). The network and the training targets are the same as v10.
 # Search: search/v11_gumbel_cpp (v10's, plus several leaves per lane in flight: max_pending / vl_mode, for single-game
-# play); inference: Model.infer (fused kernels) on MPS bf16.
+# play); inference: Model.infer (fused kernels) on MPS bf16; on CUDA the PyTorch layers, self-play as CUDA graphs.
 
 from dataclasses import dataclass, field
 import copy
@@ -11,7 +11,7 @@ import numpy as np
 import torch
 
 from bot_base import ChessbotBase
-from bots.v11_muon_metal.policy import forward_batch, pack_batch
+from bots.v11_muon_metal.policy import pack_batch, unpack
 from engine.game import MAX_MOVES_CAPACITY, GameBatch
 from models.v11_muon_metal import Model
 from models.v11_muon_metal import Config as ModelConfig
@@ -115,6 +115,7 @@ class Chessbot(ChessbotBase):
 
     # the C++ search is bound to one GameBatch (it searches that batch's games), so one per batch
     self._searches = weakref.WeakKeyDictionary()
+    self._graphs = None # CUDA: compiled _network (launch)
 
 
   def search_for(self, batch: GameBatch) -> GumbelSearch:
@@ -148,29 +149,36 @@ class Chessbot(ChessbotBase):
     batch: GameBatch,lanes: np.ndarray, states: np.ndarray, rows=None
   ):
     board, castling, ep, _, _, moves, counts = batch.encode(lanes, states)
+    packed, _, M = pack_batch(board, castling, ep, moves, counts, self.config.device, pad=True, rows=rows)
     if self.config.fused and self.infer_model.can_infer():
-      packed, _, M = pack_batch(board, castling, ep, moves, counts, self.config.device, pad=True, rows=rows)
       out = self.infer_model.infer(packed, M)       # (rows, M + 1): probabilities, then value
+    elif rows and packed.is_cuda:
+      # CUDA self-play (always `rows` rows): one CUDA graph per move width, not a kernel launch per op. max-autotune also
+      # tunes the matmuls for this GPU (RTX 5090, 051's settings: 0.41 s per step vs 0.54 with reduce-overhead)
+      if self._graphs is None:
+        self._graphs = torch.compile(self._network, mode="max-autotune", dynamic=False)
+      torch.compiler.cudagraph_mark_step_begin()
+      out = self._graphs(packed, M)
     else:
-      p, _, wdl, _ = forward_batch(
-        self.infer_model, 
-        board, castling, ep, 
-        moves, counts, 
-        self.config.device,
-        pad=True, rows=rows
-      )
-      ps = wdl.float().softmax(1)
-      out = torch.cat([p.float().softmax(-1), (ps[:, 0] - ps[:, 2])[:, None]], dim=1)
-    if out.device.type != "mps":
+      out = self._network(packed, M)
+    if out.device.type not in ("mps", "cuda"):
       return out, None, len(lanes)
 
     # double buffering: copy back without blocking and mark the point with an event, so finish() waits for THIS batch
-    # only. a blocking .cpu() would also wait for every batch queued after it, and the GPU would sit idle
-    host = torch.empty(out.shape, dtype=out.dtype)
+    # only. a blocking .cpu() would also wait for every batch queued after it, and the GPU would sit idle.
+    # CUDA copies without blocking only into pinned memory
+    host = torch.empty(out.shape, dtype=out.dtype, pin_memory=out.is_cuda)
     host.copy_(out, non_blocking=True)
-    event = torch.mps.event.Event()
+    event = torch.cuda.Event() if out.is_cuda else torch.mps.event.Event()
     event.record()
     return host, event, len(lanes)
+
+
+  def _network(self, packed, M):
+    "Model.infer's output from the PyTorch layers: (rows, M + 1) move probabilities, then value"
+    p, _, wdl, _ = self.infer_model(*unpack(packed, len(packed), M))
+    ps = wdl.float().softmax(1)
+    return torch.cat([p.float().softmax(-1), (ps[:, 0] - ps[:, 2])[:, None]], dim=1)
 
 
   @staticmethod

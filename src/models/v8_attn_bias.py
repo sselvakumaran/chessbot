@@ -108,7 +108,8 @@ class PieceOffsetBias(nn.Module):
     B, T = pieces.shape
     H = self.q_table.shape[0]
 
-    if self.training or torch.is_grad_enabled():
+    # no cache in a compiled graph: the cached maps would live in CUDA-graph memory that the next run overwrites
+    if self.training or torch.is_grad_enabled() or torch.compiler.is_compiling():
       q_maps, k_maps = self.create_maps(offset_table)
     else:
       key = (
@@ -165,7 +166,7 @@ class Attention(nn.Module):
       y = F.scaled_dot_product_attention(
         q.reshape(B, self.n_kv_heads, rep*T, self.d_head), k, v,
         attn_mask=bias.reshape(B, self.n_kv_heads, rep*T, T),
-      ).view(B, self.n_heads, T, self.d_head)
+      ).reshape(B, self.n_heads, T, self.d_head) # a view where it can be; CUDA's kernels can return another layout
     else:
       y = F.scaled_dot_product_attention(
         q, k, v, 
