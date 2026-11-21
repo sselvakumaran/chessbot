@@ -176,7 +176,7 @@
   "fpu": {
    "path": "fpu",
    "lo": 0.1,
-   "hi": 1.2,
+   "hi": 2.0,
    "kind": "log",
    "default": 0.4
   },
